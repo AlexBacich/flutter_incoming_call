@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.Drawable
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
@@ -20,20 +21,25 @@ import com.bumptech.glide.request.target.Target
 class IncomingCallActivity : AppCompatActivity() {
 
     companion object {
+        private const val TAG = "IncomingCallActivity"
 
-        private const val ACTION_INCOMING_CALL = "com.github.alezhka.flutter_incoming_call.activity.ACTION_INCOMING_CALL"
+        private const val ACTION_INCOMING_CALL =
+            "com.github.alezhka.flutter_incoming_call.activity.ACTION_INCOMING_CALL"
         private const val EXTRA_CALL_DATA = "EXTRA_CALL_DATA"
-        
+        private const val EXTRA_OPEN_APP = "EXTRA_SHOULD_IMMEDIATELY_OPEN_APP"
+
         private var fa: IncomingCallActivity? = null
 
-        fun start(callData: CallData) = Intent(ACTION_INCOMING_CALL).apply {
+        fun start(callData: CallData, shouldImmediatelyShowApp: Boolean) = Intent(ACTION_INCOMING_CALL).apply {
             putExtra(EXTRA_CALL_DATA, callData)
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            putExtra(EXTRA_OPEN_APP, shouldImmediatelyShowApp)
+            flags =
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
         }
 
         fun dismissIncoming(uuid: String?) {
             fa?.let {
-                if(uuid == null || uuid == it.callData.uuid) {
+                if (uuid == null || uuid == it.callData.uuid) {
                     FlutterIncomingCallPlugin.ringtonePlayer?.stop()
                     it.finish()
                 }
@@ -51,13 +57,17 @@ class IncomingCallActivity : AppCompatActivity() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
             setTurnScreenOn(true)
             setShowWhenLocked(true)
-            window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN
-                    or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_FULLSCREEN
+                        or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            )
         } else {
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-                    or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                    or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
-                    or WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD)
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                        or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                        or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                        or WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+            )
         }
         super.onCreate(savedInstanceState)
 
@@ -69,31 +79,45 @@ class IncomingCallActivity : AppCompatActivity() {
         fa = this
         setContentView(R.layout.activity_incoming_call)
         val data = intent.extras?.getParcelable<CallData>(EXTRA_CALL_DATA)
-        if(data == null) {
+        val shouldImmediatelyShowApp = intent.extras?.getBoolean(EXTRA_OPEN_APP)
+        Log.d(TAG, "onCreate: callData [$data]; shouldOpenApp: [$shouldImmediatelyShowApp]")
+        if (data == null || shouldImmediatelyShowApp == null) {
             finish()
             return
         }
-        
+
+
         callData = data
         tvName.text = callData.name
         tvNumber.text = callData.handle
 
         if (callData.avatar != null) {
             Glide
-                    .with(this)
-                    .load(callData.avatar)
-                    .circleCrop()
-                    .listener(object: RequestListener<Drawable> {
-                        override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Drawable>?, isFirstResource: Boolean): Boolean {
-                            return false
-                        }
+                .with(this)
+                .load(callData.avatar)
+                .circleCrop()
+                .listener(object : RequestListener<Drawable> {
+                    override fun onLoadFailed(
+                        e: GlideException?,
+                        model: Any?,
+                        target: Target<Drawable>?,
+                        isFirstResource: Boolean
+                    ): Boolean {
+                        return false
+                    }
 
-                        override fun onResourceReady(resource: Drawable?, model: Any?, target: Target<Drawable>?, dataSource: DataSource?, isFirstResource: Boolean): Boolean {
-                            ivAvatar.visibility = View.VISIBLE
-                            return false
-                        }
-                    })
-                    .into(ivAvatar)
+                    override fun onResourceReady(
+                        resource: Drawable?,
+                        model: Any?,
+                        target: Target<Drawable>?,
+                        dataSource: DataSource?,
+                        isFirstResource: Boolean
+                    ): Boolean {
+                        ivAvatar.visibility = View.VISIBLE
+                        return false
+                    }
+                })
+                .into(ivAvatar)
         }
 
         val acceptCallBtn = findViewById<ImageView>(R.id.ivAcceptCall)
@@ -108,14 +132,20 @@ class IncomingCallActivity : AppCompatActivity() {
         }
 
         val callPrefs = CallPreferences(this)
-        val config = FlutterIncomingCallPlugin.config ?: callPrefs.config ?: FactoryModels.defaultConfig()
-        if(FlutterIncomingCallPlugin.ringtonePlayer == null) {
+        val config =
+            FlutterIncomingCallPlugin.config ?: callPrefs.config ?: FactoryModels.defaultConfig()
+        if (FlutterIncomingCallPlugin.ringtonePlayer == null) {
             FlutterIncomingCallPlugin.ringtonePlayer = CallPlayer(this, config)
         }
 
         FlutterIncomingCallPlugin.ringtonePlayer?.let {
-            if(!it.isPlaying()) it.play(callData)
+            if (!it.isPlaying()) it.play(callData)
         }
+
+        if (shouldImmediatelyShowApp) {
+            acceptDialing()
+        }
+
     }
 
     override fun onBackPressed() {

@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
@@ -45,6 +46,8 @@ class CallNotification(private val context: Context) {
         val declinePi = PendingIntent.getBroadcast(context, 0, declineIntent, pendingIntentFlag)
         val acceptPi = PendingIntent.getBroadcast(context, 0, acceptIntent, pendingIntentFlag)
 
+        val openAppIntent = getCallerActivityPendingIntent(notificationID, callData, shouldImmediatelyShowApp = true)
+        val showScreenIntent = getCallerActivityPendingIntent(notificationID, callData, shouldImmediatelyShowApp = false)
 
         val soundUri: Uri = Uri.parse("android.resource://${context.packageName}/${R.raw.nosound}")
         val notification: Notification = NotificationCompat.Builder(context, config.channelId)
@@ -54,14 +57,16 @@ class CallNotification(private val context: Context) {
                 .setOngoing(true)
                 .setTimeoutAfter(config.duration)
                 .setOnlyAlertOnce(true)
-                .setFullScreenIntent(getCallerActivityPendingIntent(notificationID, callData), true)
-                .setContentIntent(getCallerActivityPendingIntent(notificationID, callData))
+                .setFullScreenIntent(showScreenIntent, true)
+                .setContentIntent(showScreenIntent)
                 .setSmallIcon(R.drawable.ic_call_black_24dp)
                 .setPriority(highPriority)
                 .setContentTitle(callData.name)
                 .setSound(soundUri)
                 .setContentText(callData.handle)
-                .addAction(0, context.getString(R.string.action_accept), acceptPi)
+                .addAction(0, context.getString(R.string.action_accept), openAppIntent)
+            // (Babich) For some reasons this intent is not working and not bringing app to front for Android 13. Therefore we are opening caller activity and from it going to the app.
+//                .addAction(0, context.getString(R.string.action_accept), acceptPi)
                 .addAction(0, context.getString(R.string.action_decline), declinePi)
                 .build()
         val notificationManager = notificationManager()
@@ -72,7 +77,7 @@ class CallNotification(private val context: Context) {
     fun showMissCallNotification(callData: CallData) {
         val notificationID = callData.notificationId
         val missedCallSound: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-        val contentIntent = getCallerActivityPendingIntent(notificationID, callData)
+        val contentIntent = getCallerActivityPendingIntent(notificationID, callData, shouldImmediatelyShowApp = false)
         val notification: Notification = NotificationCompat.Builder(context, notificationChannel)
                 .setContentTitle(callData.name)
                 .setContentText(callData.handle)
@@ -115,9 +120,9 @@ class CallNotification(private val context: Context) {
         }
     }
 
-    private fun getCallerActivityPendingIntent(notificationID: Int, callData: CallData): PendingIntent? {
-        val intent = IncomingCallActivity.start(callData)
-        return PendingIntent.getActivity(context, notificationID, intent, pendingIntentFlag)
+    private fun getCallerActivityPendingIntent(notificationID: Int, callData: CallData, shouldImmediatelyShowApp: Boolean): PendingIntent? {
+        val intent = IncomingCallActivity.start(callData, shouldImmediatelyShowApp)
+        return PendingIntent.getActivity(context, notificationID + if(shouldImmediatelyShowApp) 1 else 0 , intent, pendingIntentFlag)
     }
 
     private fun createNotificationChannel(manager: NotificationManager, soundUri: Uri?) {
