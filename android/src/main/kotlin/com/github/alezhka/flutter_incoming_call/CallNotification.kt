@@ -10,6 +10,7 @@ import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 
 
@@ -20,23 +21,24 @@ class CallNotification(private val context: Context) {
         private const val notificationChannel = "NotificationChannel"
 
         private val highPriority: Int
-            get() = if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 NotificationManager.IMPORTANCE_HIGH
             } else {
                 Notification.PRIORITY_MAX
             }
 
-        private val pendingIntentFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) (PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT) else PendingIntent.FLAG_UPDATE_CURRENT
+        private val pendingIntentFlag =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) (PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT) else PendingIntent.FLAG_UPDATE_CURRENT
     }
 
     fun showCallNotification(callData: CallData, config: PluginConfig) {
         if (config.ringtone) {
-            if(FlutterIncomingCallPlugin.ringtonePlayer == null) {
+            if (FlutterIncomingCallPlugin.ringtonePlayer == null) {
                 FlutterIncomingCallPlugin.ringtonePlayer = CallPlayer(context, config)
             }
 
             FlutterIncomingCallPlugin.ringtonePlayer?.let {
-                if(!it.isPlaying()) it.play(callData)
+                if (!it.isPlaying()) it.play(callData)
             }
         }
 
@@ -46,29 +48,40 @@ class CallNotification(private val context: Context) {
         val declinePi = PendingIntent.getBroadcast(context, 0, declineIntent, pendingIntentFlag)
         val acceptPi = PendingIntent.getBroadcast(context, 0, acceptIntent, pendingIntentFlag)
 
-        val openAppIntent = getCallerActivityPendingIntent(notificationID, callData, shouldImmediatelyShowApp = true)
-        val showScreenIntent = getCallerActivityPendingIntent(notificationID, callData, shouldImmediatelyShowApp = false)
+        val openAppIntent = getCallerActivityPendingIntent(
+            notificationID,
+            callData,
+            shouldImmediatelyShowApp = true
+        )
+        val showScreenIntent = getCallerActivityPendingIntent(
+            notificationID,
+            callData,
+            shouldImmediatelyShowApp = false
+        )
+
+        Log.d("CallNotification", "showCallNotification: ${callData.handle}")
 
         val soundUri: Uri = Uri.parse("android.resource://${context.packageName}/${R.raw.nosound}")
         val notification: Notification = NotificationCompat.Builder(context, config.channelId)
-                .setAutoCancel(true)
-                .setDefaults(0)
-                .setCategory(Notification.CATEGORY_CALL)
-                .setOngoing(true)
-                .setTimeoutAfter(config.duration)
-                .setOnlyAlertOnce(true)
-                .setFullScreenIntent(showScreenIntent, true)
-                .setContentIntent(showScreenIntent)
-                .setSmallIcon(R.drawable.ic_call_black_24dp)
-                .setPriority(highPriority)
-                .setContentTitle(callData.name)
-                .setSound(soundUri)
-                .setContentText(callData.handle)
-                .addAction(0, context.getString(R.string.action_accept), openAppIntent)
+            .setAutoCancel(true)
+            .setDefaults(0)
+            .setCategory(Notification.CATEGORY_CALL)
+            .setOngoing(true)
+            .setTimeoutAfter(config.duration)
+            .setOnlyAlertOnce(true)
+            .setFullScreenIntent(showScreenIntent, true)
+            .setContentIntent(showScreenIntent)
+            .setSmallIcon(R.drawable.ic_call_black_24dp)
+            .setPriority(highPriority)
+            .setContentTitle(callData.name)
+            .setSound(soundUri)
+            .setContentText(callData.handle)
+            .addAction(0, context.getString(R.string.action_accept), openAppIntent)
             // (Babich) For some reasons this intent is not working and not bringing app to front for Android 13. Therefore we are opening caller activity and from it going to the app.
 //                .addAction(0, context.getString(R.string.action_accept), acceptPi)
-                .addAction(0, context.getString(R.string.action_decline), declinePi)
-                .build()
+            .addAction(0, context.getString(R.string.action_decline), declinePi)
+            .setDeleteIntent(declinePi)
+            .build()
         val notificationManager = notificationManager()
         createCallNotificationChannel(notificationManager, config)
         notificationManager.notify(notificationID, notification)
@@ -77,15 +90,19 @@ class CallNotification(private val context: Context) {
     fun showMissCallNotification(callData: CallData) {
         val notificationID = callData.notificationId
         val missedCallSound: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-        val contentIntent = getCallerActivityPendingIntent(notificationID, callData, shouldImmediatelyShowApp = false)
+        val contentIntent = getCallerActivityPendingIntent(
+            notificationID,
+            callData,
+            shouldImmediatelyShowApp = false
+        )
         val notification: Notification = NotificationCompat.Builder(context, notificationChannel)
-                .setContentTitle(callData.name)
-                .setContentText(callData.handle)
-                .setSmallIcon(R.drawable.ic_phone_missed_black_24dp)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setSound(missedCallSound)
-                .setContentIntent(contentIntent)
-                .build()
+            .setContentTitle(callData.name)
+            .setContentText(callData.handle)
+            .setSmallIcon(R.drawable.ic_phone_missed_black_24dp)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setSound(missedCallSound)
+            .setContentIntent(contentIntent)
+            .build()
         val notificationManager = notificationManager()
         createNotificationChannel(notificationManager, missedCallSound)
         notificationManager.notify(notificationID, notification)
@@ -110,7 +127,11 @@ class CallNotification(private val context: Context) {
                     .setUsage(AudioAttributes.USAGE_UNKNOWN)
                     .build()
              */
-            val channel = NotificationChannel(config.channelId, config.channelName, NotificationManager.IMPORTANCE_HIGH).apply {
+            val channel = NotificationChannel(
+                config.channelId,
+                config.channelName,
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
                 description = config.channelDescription
                 // setSound(soundUri, attribution)
                 // vibrationPattern = longArrayOf(0, 1000, 500, 1000, 0, 1000, 500, 1000, 0, 1000, 500, 1000, 0, 1000, 500, 1000, 0, 1000, 500, 1000, 0, 1000, 500, 1000)
@@ -120,18 +141,31 @@ class CallNotification(private val context: Context) {
         }
     }
 
-    private fun getCallerActivityPendingIntent(notificationID: Int, callData: CallData, shouldImmediatelyShowApp: Boolean): PendingIntent? {
+    private fun getCallerActivityPendingIntent(
+        notificationID: Int,
+        callData: CallData,
+        shouldImmediatelyShowApp: Boolean
+    ): PendingIntent? {
         val intent = IncomingCallActivity.start(callData, shouldImmediatelyShowApp)
-        return PendingIntent.getActivity(context, notificationID + if(shouldImmediatelyShowApp) 1 else 0 , intent, pendingIntentFlag)
+        return PendingIntent.getActivity(
+            context,
+            notificationID + if (shouldImmediatelyShowApp) 1 else 0,
+            intent,
+            pendingIntentFlag
+        )
     }
 
     private fun createNotificationChannel(manager: NotificationManager, soundUri: Uri?) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val attributes = AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(AudioAttributes.USAGE_UNKNOWN)
-                    .build()
-            val channel = NotificationChannel(notificationChannel, "missed call", NotificationManager.IMPORTANCE_HIGH).apply {
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_UNKNOWN)
+                .build()
+            val channel = NotificationChannel(
+                notificationChannel,
+                "missed call",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
                 description = "Call Notifications"
                 setSound(soundUri, attributes)
                 vibrationPattern = longArrayOf(0, 1000)
@@ -144,5 +178,5 @@ class CallNotification(private val context: Context) {
     private fun notificationManager(): NotificationManager {
         return context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     }
-    
+
 }
